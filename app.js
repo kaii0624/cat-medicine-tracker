@@ -265,14 +265,14 @@
 
     const latestDate = new Date(latest.timestamp);
     const text = [
-      "🐾 ねこのおくすり記録",
+      "🐾 ムクカプセル記録",
       `${formatDateLong(latestDate)} ${formatTime(latestDate)}（${PERIODS[latest.period].label}）にあげました。`,
       `前回から：${elapsedLabel(latestDate, new Date())}`,
     ].join("\n");
 
     try {
       if (navigator.share) {
-        await navigator.share({ title: "ねこのおくすり", text });
+        await navigator.share({ title: "ムクカプセル", text });
         showToast("共有画面を開きました");
         return;
       }

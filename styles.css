@@ -52,14 +52,16 @@ button:focus-visible,
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 18px;
+  min-height: 64px;
+  padding: 8px 0 10px;
   margin: 0 0 10px;
 }
 
 .app-header h1 {
   margin: 0;
   color: #5c402e;
-  font-size: clamp(1.55rem, 6.8vw, 2.1rem);
+  font-size: clamp(1.85rem, 8vw, 2.45rem);
   font-weight: 800;
   letter-spacing: 0.09em;
 }
@@ -635,11 +637,13 @@ button:focus-visible,
   }
 
   .app-header {
-    margin-bottom: 6px;
+    min-height: 62px;
+    padding-block: 8px;
+    margin-bottom: 7px;
   }
 
   .app-header h1 {
-    font-size: 1.55rem;
+    font-size: 1.85rem;
   }
 
   .calendar-card {
@@ -714,7 +718,7 @@ button:focus-visible,
   }
 
   .app-header {
-    gap: 14px;
+    gap: 12px;
   }
 
   .calendar-card {

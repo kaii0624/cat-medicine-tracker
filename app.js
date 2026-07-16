@@ -26,7 +26,6 @@
     recordButton: document.querySelector("#record-button"),
     recordButtonLabel: document.querySelector("#record-button-label"),
     deleteButton: document.querySelector("#delete-button"),
-    selectedDate: document.querySelector("#selected-date"),
     toast: document.querySelector("#toast"),
   };
 
@@ -204,7 +203,6 @@
     const record = findRecord(state.selectedDateKey, state.selectedPeriod);
     elements.recordButtonLabel.textContent = record ? "記録を更新" : "記録する";
     elements.deleteButton.hidden = !record;
-    elements.selectedDate.textContent = formatDateLong(parseDateKey(state.selectedDateKey));
   }
 
   function selectPeriod(period, options = {}) {

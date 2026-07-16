@@ -20,17 +20,7 @@
         <span class="paw paw--right" aria-hidden="true">●</span>
       </header>
 
-      <section class="calendar-card" aria-labelledby="calendar-title">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">おくすりカレンダー</p>
-            <h2 id="calendar-title">直近4日</h2>
-          </div>
-          <div class="legend" aria-label="記録の見方">
-            <span><i class="legend-dot legend-dot--done"></i>記録済み</span>
-            <span><i class="legend-dot"></i>未記録</span>
-          </div>
-        </div>
+      <section class="calendar-card" aria-label="直近4日のおくすりカレンダー">
         <div id="calendar" class="calendar-grid" aria-live="polite"></div>
       </section>
 
@@ -41,7 +31,6 @@
           <img src="assets/cat-medicine.png" alt="" />
         </div>
         <div class="status-copy">
-          <p class="speech">1日2回 あげようね</p>
           <h2 id="status-title" class="elapsed">まだ記録がありません</h2>
           <p id="last-record" class="last-record">最初のお薬を記録しよう</p>
           <button id="share-button" class="share-button" type="button" disabled>
@@ -50,15 +39,7 @@
         </div>
       </section>
 
-      <section class="record-card" aria-labelledby="record-title">
-        <div class="record-heading">
-          <div>
-            <p class="eyebrow">今日のおくすり</p>
-            <h2 id="record-title">あげた時間を記録</h2>
-          </div>
-          <p id="selected-date" class="selected-date"></p>
-        </div>
-
+      <section class="record-card" aria-label="今日のおくすりを記録">
         <div class="period-tabs" role="group" aria-label="朝か夜を選択">
           <button class="period-button is-active" type="button" data-period="morning" aria-pressed="true">
             <span class="sun-icon" aria-hidden="true">☀</span> 朝
@@ -83,7 +64,6 @@
           <span class="button-cat" aria-hidden="true">ฅ</span>
         </button>
         <button id="delete-button" class="delete-button" type="button" hidden>この記録を削除</button>
-        <p class="privacy-note">記録はこの端末に保存されます</p>
       </section>
     </main>
 

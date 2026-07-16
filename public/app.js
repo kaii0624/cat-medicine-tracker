@@ -486,12 +486,21 @@
   }
 
   function captureLinkTokens() {
+    const mode = new URLSearchParams(location.search).get("mode");
     const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-    const adminToken = validToken(params.get("admin"));
+    let adminToken = validToken(params.get("admin"));
     const viewToken = validToken(params.get("view"));
-    if (adminToken) localStorage.setItem(ADMIN_TOKEN_KEY, adminToken);
+
+    if (mode === "family") {
+      adminToken = "";
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+    } else if (adminToken) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, adminToken);
+    }
     if (viewToken) localStorage.setItem(VIEW_TOKEN_KEY, viewToken);
-    if (adminToken || viewToken) history.replaceState(null, "", `${location.pathname}${location.search}`);
+    if (params.has("admin") || params.has("view")) {
+      history.replaceState(null, "", `${location.pathname}${location.search}`);
+    }
     return { adminToken, viewToken };
   }
 
@@ -509,7 +518,9 @@
 
   function buildFamilyUrl() {
     if (!usesRemoteStorage() || !state.viewToken) return "";
-    return `${location.origin}${location.pathname}#view=${encodeURIComponent(state.viewToken)}`;
+    const url = new URL(`${location.origin}${location.pathname}`);
+    url.searchParams.set("mode", "family");
+    return `${url.href}#view=${encodeURIComponent(state.viewToken)}`;
   }
 
   function showToast(message) {

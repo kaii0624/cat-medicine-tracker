@@ -2,17 +2,27 @@
   "use strict";
 
   const STORAGE_KEY = "cat-medicine-tracker.records.v1";
+  const ADMIN_TOKEN_KEY = "muku-capsule.admin-token.v1";
+  const VIEW_TOKEN_KEY = "muku-capsule.view-token.v1";
+  const REMOTE_REFRESH_MS = 10_000;
+  const REMOTE_HOST = location.hostname.endsWith(".workers.dev") || location.hostname.endsWith(".pages.dev");
   const PERIODS = {
     morning: { label: "朝", symbol: "☀" },
     evening: { label: "夜", symbol: "☾" },
   };
 
+  const linkTokens = captureLinkTokens();
   const state = {
     records: loadRecords(),
     selectedPeriod: new Date().getHours() < 15 ? "morning" : "evening",
     selectedHour: new Date().getHours(),
     selectedMinute: new Date().getMinutes(),
     selectedDateKey: dateKey(new Date()),
+    adminToken: linkTokens.adminToken || loadToken(ADMIN_TOKEN_KEY),
+    viewToken: linkTokens.viewToken || loadToken(VIEW_TOKEN_KEY),
+    remoteAvailable: REMOTE_HOST,
+    accessMissing: false,
+    syncInFlight: false,
   };
 
   const elements = {
@@ -26,14 +36,15 @@
     recordButton: document.querySelector("#record-button"),
     recordButtonLabel: document.querySelector("#record-button-label"),
     deleteButton: document.querySelector("#delete-button"),
+    recordCard: document.querySelector(".record-card"),
     toast: document.querySelector("#toast"),
   };
 
   let toastTimer;
 
-  init();
+  init().catch(() => showToast("読み込みに失敗しました。再読み込みしてください"));
 
-  function init() {
+  async function init() {
     buildWheel(elements.hourWheel, 24, state.selectedHour, (value) => {
       state.selectedHour = value;
     });
@@ -49,8 +60,52 @@
     elements.shareButton.addEventListener("click", shareLatestRecord);
 
     selectPeriod(state.selectedPeriod, { keepTime: true });
+    renderAccessMode();
     render();
+    await refreshRemoteRecords({ silent: true });
     window.setInterval(renderStatus, 60_000);
+    window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshRemoteRecords({ silent: true });
+    }, REMOTE_REFRESH_MS);
+    window.addEventListener("focus", () => refreshRemoteRecords({ silent: true }));
+  }
+
+  async function refreshRemoteRecords(options = {}) {
+    if (state.syncInFlight) return;
+    state.syncInFlight = true;
+    try {
+      const response = await apiRequest("/api/records", { method: "GET" });
+      if (response.status === 404 && !REMOTE_HOST) return;
+
+      state.remoteAvailable = true;
+      if (response.status === 401) {
+        if (state.adminToken && state.viewToken) {
+          state.adminToken = "";
+          localStorage.removeItem(ADMIN_TOKEN_KEY);
+          renderAccessMode();
+          state.syncInFlight = false;
+          return refreshRemoteRecords(options);
+        }
+        state.accessMissing = true;
+        state.records = [];
+        renderAccessMode();
+        render();
+        return;
+      }
+      if (!response.ok) throw new Error(`Sync failed: ${response.status}`);
+
+      const data = await response.json();
+      state.records = normalizeRecords(data.records);
+      state.accessMissing = false;
+      renderAccessMode();
+      render();
+    } catch {
+      if ((REMOTE_HOST || state.remoteAvailable) && !options.silent) {
+        showToast("共有データを読み込めませんでした");
+      }
+    } finally {
+      state.syncInFlight = false;
+    }
   }
 
   function buildWheel(container, count, initialValue, onChange) {
@@ -163,6 +218,10 @@
     `;
 
     button.addEventListener("click", () => {
+      if (usesRemoteStorage() && !state.adminToken) {
+        showToast(record ? `${formatDateLong(new Date(record.timestamp))} ${formatTime(new Date(record.timestamp))}の記録です` : "まだ記録されていません");
+        return;
+      }
       const todayKey = dateKey(new Date());
       if (key !== todayKey) {
         showToast(record ? `${formatDateLong(new Date(record.timestamp))}の記録です` : "過去の日付には記録できません");
@@ -185,6 +244,13 @@
   }
 
   function renderStatus() {
+    if (state.accessMissing) {
+      elements.elapsed.textContent = "共有リンクから開いてね";
+      elements.lastRecord.textContent = "家族用リンクをもう一度開いてください";
+      elements.shareButton.disabled = true;
+      return;
+    }
+
     const latest = getLatestRecord();
     if (!latest) {
       elements.elapsed.textContent = "まだ記録がありません";
@@ -205,6 +271,12 @@
     elements.deleteButton.hidden = !record;
   }
 
+  function renderAccessMode() {
+    const viewerMode = usesRemoteStorage() && !state.adminToken;
+    elements.recordCard.hidden = viewerMode;
+    document.body.classList.toggle("viewer-mode", viewerMode);
+  }
+
   function selectPeriod(period, options = {}) {
     state.selectedPeriod = period;
     elements.periodButtons.forEach((button) => {
@@ -223,7 +295,7 @@
     renderEditorState();
   }
 
-  function recordDose() {
+  async function recordDose() {
     const timestamp = timestampFromSelection();
     const now = new Date();
     if (timestamp.getTime() > now.getTime() + 5 * 60_000) {
@@ -241,18 +313,60 @@
       timestamp: timestamp.toISOString(),
     };
 
-    if (existingIndex >= 0) state.records[existingIndex] = record;
-    else state.records.push(record);
+    if (usesRemoteStorage()) {
+      elements.recordButton.disabled = true;
+      try {
+        const response = await apiRequest("/api/records", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(record),
+        });
+        if (!response.ok) {
+          handleWriteFailure(response.status);
+          return;
+        }
+        const data = await response.json();
+        upsertStateRecord(data.record);
+        render();
+        showToast(`${PERIODS[state.selectedPeriod].label} ${formatTime(timestamp)} に記録しました`);
+      } catch {
+        showToast("記録できませんでした。通信を確認してください");
+      } finally {
+        elements.recordButton.disabled = false;
+      }
+      return;
+    }
 
-    state.records.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    upsertStateRecord(record);
     saveRecords();
     render();
     showToast(`${PERIODS[state.selectedPeriod].label} ${formatTime(timestamp)} に記録しました`);
   }
 
-  function deleteSelectedRecord() {
+  async function deleteSelectedRecord() {
     const record = findRecord(state.selectedDateKey, state.selectedPeriod);
     if (!record) return;
+
+    if (usesRemoteStorage()) {
+      elements.deleteButton.disabled = true;
+      try {
+        const path = `/api/records/${encodeURIComponent(record.dateKey)}/${encodeURIComponent(record.period)}`;
+        const response = await apiRequest(path, { method: "DELETE" });
+        if (!response.ok) {
+          handleWriteFailure(response.status);
+          return;
+        }
+        state.records = state.records.filter((item) => item.id !== record.id);
+        render();
+        showToast(`${PERIODS[state.selectedPeriod].label}の記録を削除しました`);
+      } catch {
+        showToast("削除できませんでした。通信を確認してください");
+      } finally {
+        elements.deleteButton.disabled = false;
+      }
+      return;
+    }
+
     state.records = state.records.filter((item) => item.id !== record.id);
     saveRecords();
     render();
@@ -264,11 +378,14 @@
     if (!latest) return;
 
     const latestDate = new Date(latest.timestamp);
-    const text = [
+    const lines = [
       "🐾 ムクカプセル記録",
       `${formatDateLong(latestDate)} ${formatTime(latestDate)}（${PERIODS[latest.period].label}）にあげました。`,
       `前回から：${elapsedLabel(latestDate, new Date())}`,
-    ].join("\n");
+    ];
+    const familyUrl = buildFamilyUrl();
+    if (familyUrl) lines.push(familyUrl);
+    const text = lines.join("\n");
 
     try {
       if (navigator.share) {
@@ -306,14 +423,7 @@
   function loadRecords() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((record) =>
-        record &&
-        typeof record.id === "string" &&
-        typeof record.dateKey === "string" &&
-        PERIODS[record.period] &&
-        Number.isFinite(new Date(record.timestamp).getTime()),
-      );
+      return normalizeRecords(parsed);
     } catch {
       return [];
     }
@@ -321,6 +431,85 @@
 
   function saveRecords() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+  }
+
+  function normalizeRecords(records) {
+    if (!Array.isArray(records)) return [];
+    return records
+      .filter((record) =>
+        record &&
+        typeof record.dateKey === "string" &&
+        PERIODS[record.period] &&
+        Number.isFinite(new Date(record.timestamp).getTime()),
+      )
+      .map((record) => ({
+        id: typeof record.id === "string" ? record.id : `${record.dateKey}-${record.period}`,
+        dateKey: record.dateKey,
+        period: record.period,
+        timestamp: new Date(record.timestamp).toISOString(),
+      }))
+      .sort((left, right) => new Date(left.timestamp) - new Date(right.timestamp));
+  }
+
+  function upsertStateRecord(record) {
+    const normalized = normalizeRecords([record])[0];
+    if (!normalized) return;
+    const existingIndex = state.records.findIndex(
+      (item) => item.dateKey === normalized.dateKey && item.period === normalized.period,
+    );
+    if (existingIndex >= 0) state.records[existingIndex] = normalized;
+    else state.records.push(normalized);
+    state.records.sort((left, right) => new Date(left.timestamp) - new Date(right.timestamp));
+  }
+
+  function usesRemoteStorage() {
+    return REMOTE_HOST || state.remoteAvailable;
+  }
+
+  function apiRequest(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json");
+    const token = state.adminToken || state.viewToken;
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(path, { ...options, headers, cache: "no-store" });
+  }
+
+  function handleWriteFailure(status) {
+    if (status === 401 || status === 403) {
+      state.adminToken = "";
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      renderAccessMode();
+      showToast("管理用リンクをもう一度開いてください");
+      return;
+    }
+    showToast("記録を保存できませんでした");
+  }
+
+  function captureLinkTokens() {
+    const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const adminToken = validToken(params.get("admin"));
+    const viewToken = validToken(params.get("view"));
+    if (adminToken) localStorage.setItem(ADMIN_TOKEN_KEY, adminToken);
+    if (viewToken) localStorage.setItem(VIEW_TOKEN_KEY, viewToken);
+    if (adminToken || viewToken) history.replaceState(null, "", `${location.pathname}${location.search}`);
+    return { adminToken, viewToken };
+  }
+
+  function loadToken(key) {
+    try {
+      return validToken(localStorage.getItem(key));
+    } catch {
+      return "";
+    }
+  }
+
+  function validToken(value) {
+    return typeof value === "string" && /^[A-Za-z0-9_-]{32,}$/.test(value) ? value : "";
+  }
+
+  function buildFamilyUrl() {
+    if (!usesRemoteStorage() || !state.viewToken) return "";
+    return `${location.origin}${location.pathname}#view=${encodeURIComponent(state.viewToken)}`;
   }
 
   function showToast(message) {

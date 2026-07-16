@@ -1,0 +1,15 @@
+{
+  "name": "muku-capsule",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute muku-capsule-db --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute muku-capsule-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "4.111.0"
+  }
+}

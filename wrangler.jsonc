@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "muku-capsule",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-16",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "muku-capsule-db",
+      "database_id": "758ae466-957f-4eeb-9823-413fa935315a"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

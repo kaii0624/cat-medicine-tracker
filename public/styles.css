@@ -372,6 +372,10 @@ button:focus-visible,
   padding: 12px 14px 13px;
 }
 
+.record-card[hidden] {
+  display: none;
+}
+
 .period-tabs {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -399,6 +403,12 @@ button:focus-visible,
   color: #fff;
   background: linear-gradient(135deg, #fa7d93, #ef607d);
   box-shadow: 0 6px 15px rgba(239, 96, 125, 0.24);
+}
+
+.record-button:disabled,
+.delete-button:disabled {
+  opacity: 0.62;
+  cursor: wait;
 }
 
 .sun-icon {
